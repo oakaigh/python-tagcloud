@@ -10,7 +10,7 @@ from . import graphics
 class CanvasBase(abc.ABC):
     class TextSpec(typing.NamedTuple):
         content: str
-        size: int
+        size: typing.Literal['fit-content'] | int
         rotation: float
         position: graphics.Coordinate = None
 

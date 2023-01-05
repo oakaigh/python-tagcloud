@@ -20,12 +20,12 @@ class OccupancyMap:
         self._mask = mask
 
         self._data = None
-        def _f_update(*args, **kwargs):
+        def _f_update(_canvas, _position, _region):
             d = self._canvas.data_bilevel
             if self._mask is not None:
                 d += self._mask
             self._data = graphics.SummedAreaTable(d.astype(np.uint))
-        _f_update()
+        _f_update(None, None, None)
         self._canvas.callbacks.region_update[self] = _f_update
 
     def __del__(self):
@@ -39,15 +39,6 @@ class OccupancyMap:
     def data(self) -> graphics.SummedAreaTable:
         return self._data
 
-    def query_position(
-        self, 
-        block_size: graphics.Dimension
-    ) -> typing.Iterator[graphics.Coordinate]:
-        for pos, area in self.data.walk(block_size):
-            # unoccupied area
-            if not area:
-                yield pos
-    
     def positions(
         self,
         block_size: graphics.Dimension
@@ -66,15 +57,23 @@ class OccupancyMap:
             return None
         return graphics.Coordinate(*random_state.choice(r))
 
+    def query_position(
+        self, 
+        block_size: graphics.Dimension
+    ) -> typing.Iterator[graphics.Coordinate]:
+        for pos, area in self.data.walk(block_size):
+            # unoccupied area
+            if not area:
+                yield pos
 
 class TextPlacement:
     def __init__(self, 
         canvas: backend_base.CanvasBase, 
-        occupancy: OccupancyMap, 
+        mask: np.typing.ArrayLike | None,
         random_state: random.Random
     ):
         self.canvas = canvas
-        self.occupancy = occupancy
+        self.occupancy = OccupancyMap(canvas, mask=mask)
         self.random_state = random_state
 
     def add(
@@ -212,7 +211,7 @@ class DescendingFrequencyTable:
 
 
 
-class WordCloud:
+class TagCloud:
     class TextParams(typing.TypedDict):
         size_min: int
         size_max: typing.Union[int, None]
@@ -238,13 +237,10 @@ class WordCloud:
         bool_mask: typing.Union[np.typing.ArrayLike, None],
         text_props: TextParams
     ) -> typing.Iterator[backend_base.TextSpec]:
-        random_state = self.random_state
-
-        occupancy = OccupancyMap(canvas, mask=bool_mask)
         text_placement = TextPlacement(
             canvas=canvas, 
-            occupancy=occupancy, 
-            random_state=random_state
+            mask=bool_mask, 
+            random_state=self.random_state
         )
 
         last_freq = None

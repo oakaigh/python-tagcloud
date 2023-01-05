@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     python_requires='>=3.8',
-    name='wordcloud',
+    name='tagcloud',
     version='2.0.0',
     install_requires=[
         'numba>=0.56.4',
@@ -10,6 +10,9 @@ setuptools.setup(
     ],
     extras_require={
         'matplotlib': ['matplotlib>=3.6.2'],
-        'pillow': ['pillow>=9.4.0']
+        'pillow': [
+            'pillow>=9.4.0',
+            #'freetype-py>=2.3.0'
+        ]
     }
 )

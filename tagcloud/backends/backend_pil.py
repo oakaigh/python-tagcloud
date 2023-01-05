@@ -96,7 +96,7 @@ class Image:
         self, 
         nocopy=False, 
         norender=False
-    ):
+    ) -> Image:
         self._nocopy = nocopy
         self._render_queue = (
             None if norender else 
@@ -104,7 +104,7 @@ class Image:
         )
         return self
 
-    def render(self):
+    def render(self) -> Image:
         if self._render_queue is None:
             return self
 
@@ -116,7 +116,7 @@ class Image:
         return self
 
     @property
-    def size(self):
+    def size(self) -> graphics.Dimension:
         return self._dimension
 
     @property
@@ -161,7 +161,7 @@ class Image:
         self._dimension = size
 
     # stolen from pillow
-    # see https://github.com/python-pillow/Pillow/blob/f5c47ebe128a448ada4e0330005e580e1ea0ab95/src/PIL/Image.py#L2227-L2344
+    # see https://github.com/python-pillow/Pillow/blob/9.4.x/src/PIL/Image.py#L2227-L2344
     def rotate(
         self,
         angle,
@@ -329,23 +329,28 @@ class Image:
 
 
 class CanvasPIL(backend_base.CanvasBase):
-    def __init__(self):
+    def __init__(self, size: graphics.Dimension):
         super().__init__()
-
         # TODO
-        self._base = Image()
-
-        pass
+        self._base = Image(mode='1', size=size, color=255)
 
     @property
     def dimension(self) -> graphics.Dimension:
-        raise NotImplementedError()
+        return self._base.size.transpose()
 
     @property
     def data_bilevel(self) -> graphics.BilevelData:
-        raise NotImplementedError()
+        return self._base.data
 
     def text(self, text_spec: backend_base.TextSpec) -> graphics.Dimension:
+        PIL.ImageFont.truetype()
+
+        text_spec.content
+        text_spec.size
+        text_spec.rotation
+        text_spec.position
+        
+        #text_spec.
         # TODO
         # self.callbacks.region_update.__call__(self, , )
         raise NotImplementedError()

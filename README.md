@@ -1,4 +1,4 @@
-# python-wordcloud
+# python-tagcloud
 
 https://en.wikipedia.org/wiki/Tag_cloud
 

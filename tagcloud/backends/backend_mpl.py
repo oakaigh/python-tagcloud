@@ -6,6 +6,7 @@ import typing
 import numpy as np
 
 import matplotlib as mpl
+import matplotlib.backends.backend_agg
 
 
 class CanvasMPL(backend_base.CanvasBase):
