@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from . import backend_base
 from . import graphics
 
@@ -19,31 +21,66 @@ class OccupancyMap:
         self._canvas = canvas
         self._mask = mask
 
-        self._data = None
-        def _f_update(_canvas, _position, _region):
+        # TODO rm!!!!
+        '''
+        self._base = None
+        def _f_update(_canvas, position, region):
             d = self._canvas.data_bilevel
             if self._mask is not None:
                 d += self._mask
-            self._data = graphics.SummedAreaTable(d.astype(np.uint))
+            self._base = graphics.SummedAreaTable(d.astype(np.uint))
         _f_update(None, None, None)
         self._canvas.callbacks.region_update[self] = _f_update
+        '''
+        #return
+
+
+        d = self._canvas.data_bilevel
+        if self._mask is not None:
+            d += self._mask
+        self._base = graphics.SummedAreaTable(d.astype(np.uint))
+
+        def f(_canvas, position, region):
+            self._base.paste(
+                position,
+                #graphics.SummedAreaTable(region.astype(np.uint))
+                graphics.SummedAreaTable(region)
+            )
+            return
+
+            # TODO rm debug
+            # TODO mv to SummedAreaTable
+            def _TODO_rm_test_f():
+                d = self._canvas.data_bilevel
+                if self._mask is not None:
+                    d += self._mask
+                return graphics.SummedAreaTable(d.astype(np.uint))
+
+                # TODO eq!!!!
+
+            import matplotlib.pyplot as plt
+            plt.imshow(_TODO_rm_test_f().base)
+            print(_TODO_rm_test_f().base)
+            plt.show()
+            plt.imshow(self._base.base)
+            print(self._base.base)
+            plt.show()
+            plt.imshow(_TODO_rm_test_f().base - self._base.base)
+            plt.show()
+
+
+            assert np.array_equal(_TODO_rm_test_f().base, self._base)
+
+        self._canvas.callbacks.region_update[self] = f
 
     def __del__(self):
         self._canvas.callbacks.region_update.pop(self)
-
-    @property
-    def canvas(self) -> backend_base.CanvasBase:
-        return self._canvas
-
-    @property
-    def data(self) -> graphics.SummedAreaTable:
-        return self._data
 
     def positions(
         self,
         block_size: graphics.Dimension
     ) -> np.typing.NDArray:
-        a = self.data.area_matrix(block_size)
+        a = self._base.area_matrix(block_size)
         # unoccupied area == 0
         return np.argwhere(a == 0)
 
@@ -55,13 +92,26 @@ class OccupancyMap:
         r = self.positions(block_size)
         if r.size == 0:
             return None
+
+        # TODO rm debug
+        '''
+        pos = graphics.Coordinate(*random_state.choice(r))
+        print(
+            'sample_position', 
+            self._canvas.dimension, 
+            block_size, 
+            pos
+        )
+        return pos
+        '''
+
         return graphics.Coordinate(*random_state.choice(r))
 
     def query_position(
         self, 
         block_size: graphics.Dimension
     ) -> typing.Iterator[graphics.Coordinate]:
-        for pos, area in self.data.walk(block_size):
+        for pos, area in self._base.walk(block_size):
             # unoccupied area
             if not area:
                 yield pos
@@ -92,6 +142,8 @@ class TextPlacement:
         random_state = self.random_state
         canvas = self.canvas
         occupancy = self.occupancy
+
+        # TODO
         size_min, size_max = size_range
         rotation_min, rotation_max = rotation_range
 
@@ -104,24 +156,27 @@ class TextPlacement:
 
             if not (rotation_min <= rotation and rotation <= rotation_max):
                 return None
-            
-            dim = canvas.text(backend_base.TextSpec(
-                content=text, 
-                size=size, 
+
+            # TODO rm debug
+            print('try', size, rotation)
+
+            text_spec = backend_base.TextSpec(
                 position=None, 
-                rotation=rotation
-            ))
+                rotation=rotation,
+                content=text, 
+                size=size
+            )
+            dim = canvas.text(text_spec)
 
             # try to find a position
             pos = occupancy.sample_position(dim, random_state=random_state)
             if pos is not None:
-                return backend_base.TextSpec(
-                    content=text,
-                    size=size, 
-                    position=pos, 
-                    rotation=rotation
-                )
+                text_spec = text_spec.set(position=pos)
+                # draw the text
+                canvas.text(text_spec)
+                return text_spec
 
+            # TODO rotate only once!!!!!!!!
             # if we didn't find a place...
             # first try to rotate!
             res = _impl(
@@ -143,6 +198,8 @@ class TextPlacement:
 
         rotation = rotation_min
         if random_state.random() < rotation_prob:
+            # TODO
+            # see https://stackoverflow.com/a/11949245/11934495
             rotation = random_state.choice(
                 range(
                     rotation_min, 
@@ -154,19 +211,13 @@ class TextPlacement:
         return _impl(size=size_max, rotation=rotation)
 
 
-
-
-
-
-import collections.abc
-
 class FrequencyData(typing.NamedTuple):
     token: typing.Any
     frequency: float
 
 class DescendingFrequencyTable:
     @staticmethod
-    def _sorted(a: collections.abc.Iterable[FrequencyData]):
+    def _sorted(a: typing.Iterable[FrequencyData]) -> typing.Iterable[FrequencyData]:
         return sorted(
             a, 
             key=lambda x: x.frequency, 
@@ -174,7 +225,7 @@ class DescendingFrequencyTable:
         )
 
     @classmethod
-    def from_iter(cls, a: collections.abc.Iterable):
+    def from_iter(cls, a: typing.Iterable) -> DescendingFrequencyTable:
         return cls(map(lambda x: FrequencyData(**x), a))
 
     try:
@@ -185,7 +236,7 @@ class DescendingFrequencyTable:
             return cls.from_iter(df.to_dict('records'))
 
         @classmethod
-        def from_data(cls, a: collections.abc.Iterable):
+        def from_data(cls, a: typing.Iterable):
             df_token_freqs = cls.pd.Series(a).value_counts()
 
             return cls.from_dataframe(
@@ -197,17 +248,20 @@ class DescendingFrequencyTable:
     except ModuleNotFoundError:
         pass 
 
-    def __init__(self, a: collections.abc.Iterable[FrequencyData]):
+    def __init__(self, a: typing.Iterable[FrequencyData]):
         self.base = self._sorted(a)
 
-    def head(self, n):
+    def head(self, n) -> DescendingFrequencyTable:
         inst = self.__new__(self.__class__)
         inst.base = self.base[:n]
         return inst
 
     @property
-    def items(self):
+    def items(self) -> typing.Iterable[FrequencyData]:
         return self.base
+
+    def max(self) -> FrequencyData:
+        return max(self.items, key=lambda x: x.frequency)
 
 
 
@@ -243,9 +297,13 @@ class TagCloud:
             random_state=self.random_state
         )
 
+        max_freq = frequency_table.max().frequency
         last_freq = None
 
         for token, freq in frequency_table.items:
+            # normalize
+            freq = freq / max_freq
+
             if freq == 0:
                 continue
 
@@ -270,16 +328,17 @@ class TagCloud:
             if text_spec is None:
                 break
 
-            # draw the text
-            canvas.text(text_spec)
             yield text_spec
 
+            # update last frequency
             last_freq = freq
 
             # TODO rm debug
+            print('progress', token, freq)
             continue
+            import matplotlib.pyplot as plt
             fig, ax = plt.subplots(2)
-            ax[0].imshow(text_placement.occupancy.data.base.astype(np.bool_))
+            ax[0].imshow(text_placement.occupancy._base.base.astype(np.bool_))
             ax[1].imshow(canvas.data_bilevel)
             plt.suptitle(token)
             plt.show()
@@ -298,7 +357,7 @@ class TagCloud:
                 size_rescaling=.5,
                 rotation_range=(0, 90),
                 rotation_step=90,
-                rotation_prob=.5
+                rotation_prob=.1
             ),
             **text_props
         }

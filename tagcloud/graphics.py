@@ -11,6 +11,29 @@ import numpy.typing
 import numba
 
 
+# see https://stackoverflow.com/a/27087513/11934495
+def _TODO_shift_full(a, offsets, fill_value=np.nan):
+    _mom = lambda s: s if s > 0 else 0
+    _non = lambda s: s if s < 0 else None
+
+    res = np.full_like(a, fill_value=fill_value)
+    res[tuple(np.s_[_mom(o):_non(o)] for o in offsets)] \
+        = a[tuple(np.s_[_mom(-o):_non(-o)] for o in offsets)]
+
+    return res
+
+# see https://stackoverflow.com/a/27087513/11934495
+#@numba.jit
+def shift(a: np.typing.NDArray, offsets) -> np.typing.NDArray:
+    _mom = lambda s: s if s > 0 else 0
+    _non = lambda s: s if s < 0 else None
+    return a[tuple(np.s_[_mom(o):_non(o)] for o in offsets)]
+
+#@numba.jit
+def slice_like(a: np.typing.NDArray) -> np.s_:
+    s = a.shape
+    return np.s_[tuple(np.s_[:l] for l in s)]
+
 class RGBAChannel(enum.IntEnum):
     R = 0
     G = 1
@@ -55,17 +78,6 @@ def rgb_to_bilevel(
     
     return (rgb != rgb_background).all(axis=-1)
 
-# see https://stackoverflow.com/a/27087513/11934495
-def shift(a, offsets, fill_value=np.nan):
-    _mom = lambda s: s if s > 0 else 0
-    _non = lambda s: s if s < 0 else None
-
-    res = np.full_like(a, fill_value=fill_value)
-    res[tuple(np.s_[_mom(o):_non(o)] for o in offsets)] \
-        = a[tuple(np.s_[_mom(-o):_non(-o)] for o in offsets)]
-
-    return res
-
 class Coordinate(typing.NamedTuple):
     x: int
     y: int
@@ -73,6 +85,9 @@ class Coordinate(typing.NamedTuple):
     @classmethod
     def make(cls, x, y):
         return cls(x=int(x), y=int(y))
+
+    def transpose(self) -> Coordinate:
+        return Coordinate(x=self.y, y=self.x)
 
 @functools.total_ordering
 class Dimension(typing.NamedTuple):
@@ -140,7 +155,8 @@ class SummedAreaTable:
         return np.apply_over_axes(
             np.cumsum, 
             a, 
-            axes=np.arange(2)
+            # NOTE outer to inner axis for speed?
+            axes=np.arange(2)[::-1]
         )
 
     def __init__(self, a: np.typing.NDArray):
@@ -190,6 +206,7 @@ class SummedAreaTable:
         block_size: Dimension
     ):
         x_block, y_block = block_size
+
         return (
             (a[x_block:, y_block:] - a[x_block:, :-y_block])
                 - (a[:-x_block, y_block:] - a[:-x_block, :-y_block])
@@ -199,12 +216,59 @@ class SummedAreaTable:
         self,
         block_size: Dimension
     ):
-        return self._area_matrix(self.base, block_size)
+        return self._area_matrix(
+            self.base, 
+            block_size=block_size
+        )
 
-    # TODO test
-    def _rm_area_matrix_comp(self,
-        block_size: Dimension):
+    @staticmethod
+    #@numba.jit
+    def _paste(
+        a: np.typing.NDArray, 
+        position: Coordinate, 
+        a_src: np.typing.NDArray
+    ):
+        a_ = shift(a, position)
+        s_pad = np.subtract(a_.shape, a_src.shape)
+        a_[...] += np.pad(
+            a_src, 
+            pad_width=[(0, pad_r) for pad_r in s_pad], 
+            mode='edge'
+        )
 
+        return a
+
+    def paste(
+        self,
+        position: Coordinate,
+        source: SummedAreaTable
+    ):
+        self.base = self._paste(
+            self.base, 
+            position=position, 
+            a_src=source.base
+        )
+
+        return self
+
+        # TODO rm!!!
+        # TODO rm debug
+        # TODO handle overflow!!!
+        print(
+            'paste',
+            'base:',
+            self.base.shape,
+            position,
+            shift(self.base, position).shape, 
+            'source:',
+            source.base.shape,
+            shift(self.base, position)[slice_like(source.base)].shape
+        )
+        shift(self.base, position)[slice_like(source.base)] += source.base
+        return self
+
+    # TODO test!!!!!!!!!!!!!!!!!!!!!!!!!
+    def _rm_area_matrix_comp(self, block_size: Dimension):
         x_max, y_max = self.base.shape
         x_block, y_block = block_size
 

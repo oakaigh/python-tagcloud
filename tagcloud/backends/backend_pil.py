@@ -136,9 +136,12 @@ class Image:
         method: Transpose, 
         *args, **kwargs
     ):
+        if method is None:
+            return
+
         def f():
             self._base = self._base.transpose(method, *args, **kwargs)
-        self._render_queue.put(f)
+        self._render_queue.put(f)            
 
         if method in (None, Transpose.ROTATE_180):
             pass
@@ -205,7 +208,7 @@ class Image:
                 return self.transpose(None)
             if angle == 180:
                 return self.transpose(Transpose.ROTATE_180)
-            if angle in (90, 270) and (expand or self.width == self.height):
+            if angle in (90, 270) and (expand or self.size.width == self.size.height):
                 return self.transpose(
                     Transpose.ROTATE_90 if angle == 90 else Transpose.ROTATE_270
                 )
@@ -327,12 +330,22 @@ class Image:
 
         return bbox
 
+# TODO
+class Font:
+    pass
+
+
+import io
 
 class CanvasPIL(backend_base.CanvasBase):
     def __init__(self, size: graphics.Dimension):
         super().__init__()
         # TODO
-        self._base = Image(mode='1', size=size, color=255)
+        #self._base = Image.make(mode='1', size=size.transpose(), color=0)
+        self._base = Image.make(mode='L', size=size.transpose(), color=0)
+        # TODO !!!!!!!
+        with open('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', mode='rb') as f:
+            self._font_data = f.read()
 
     @property
     def dimension(self) -> graphics.Dimension:
@@ -343,14 +356,44 @@ class CanvasPIL(backend_base.CanvasBase):
         return self._base.data
 
     def text(self, text_spec: backend_base.TextSpec) -> graphics.Dimension:
-        PIL.ImageFont.truetype()
+        # TODO font manager!!! 
+        font = PIL.ImageFont.truetype(
+            io.BytesIO(self._font_data), 
+            size=int(text_spec.size)
+        )
 
-        text_spec.content
-        text_spec.size
-        text_spec.rotation
-        text_spec.position
-        
-        #text_spec.
-        # TODO
-        # self.callbacks.region_update.__call__(self, , )
-        raise NotImplementedError()
+        # TODO memorization
+        region = Image.from_font(font, mode='1', text=text_spec.content)
+
+        # TODO memorization
+        region.rotate(angle=int(text_spec.rotation), expand=True)
+
+        if text_spec.position is not None:
+            pos = text_spec.position
+
+            region.render()
+            self._base.paste(
+                region, 
+                # NOTE pillow uses column major `pos` is row major
+                box=pos.transpose(), 
+                mask=region
+            )
+            self._base.render()
+            # TODO
+            self.callbacks.region_update.__call__(
+                self, 
+                pos, 
+                region.data
+            )
+
+        # TODO rm d
+        '''
+        print(
+            'TODO_rm_text', 
+            'text:',
+            text_spec,
+            'region:',
+            region.size, region.data.shape
+        )
+        '''
+        return region.size.transpose()

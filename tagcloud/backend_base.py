@@ -1,4 +1,5 @@
 import typing
+import dataclasses as dc
 import types
 import abc
 
@@ -6,19 +7,27 @@ from . import utils
 from . import graphics
 
 
+@dc.dataclass(frozen=True)
+class SpecBase(abc.ABC):
+    def set(self, **attrs):
+        return dc.replace(self, **attrs)
+
+@dc.dataclass(frozen=True)
+class ElementSpec(SpecBase):
+    position: graphics.Coordinate
+    rotation: int
+
 # NOTE coord system: origin upper left 
 class CanvasBase(abc.ABC):
-    class TextSpec(typing.NamedTuple):
-        content: str
-        size: typing.Literal['fit-content'] | int
-        rotation: float
-        position: graphics.Coordinate = None
-
     def __init__(self):
         self.callbacks = types.SimpleNamespace(
             region_update=utils.Callback[
                 typing.Callable[
-                    [CanvasBase, graphics.Coordinate, graphics.BilevelData], 
+                    [
+                        CanvasBase, 
+                        graphics.Coordinate, 
+                        graphics.BilevelData
+                    ], 
                     typing.Any
                 ]
             ]()
@@ -33,6 +42,11 @@ class CanvasBase(abc.ABC):
     @abc.abstractmethod
     def data_bilevel(self) -> graphics.BilevelData:
         raise NotImplementedError()
+
+    @dc.dataclass(frozen=True)
+    class TextSpec(ElementSpec):
+        content: str
+        size: int
 
     @abc.abstractmethod
     def text(self, text_spec: TextSpec) -> graphics.Dimension:
