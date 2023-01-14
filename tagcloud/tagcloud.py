@@ -12,6 +12,27 @@ import numpy as np
 import numpy.typing
 
 
+
+## TODO mv to utils
+import functools
+import time
+
+def timer(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        value = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        run_time = end_time - start_time
+        #print("Finished {} in {} msecs".format(repr(func.__name__), run_time * 1e3))
+        return value
+
+    return wrapper
+## TODO rm debug
+
+
+
+
 class OccupancyMap:
     def __init__(
         self, 
@@ -21,69 +42,39 @@ class OccupancyMap:
         self._canvas = canvas
         self._mask = mask
 
-        # TODO rm!!!!
-        '''
-        self._base = None
-        def _f_update(_canvas, position, region):
-            d = self._canvas.data_bilevel
-            if self._mask is not None:
-                d += self._mask
-            self._base = graphics.SummedAreaTable(d.astype(np.uint))
-        _f_update(None, None, None)
-        self._canvas.callbacks.region_update[self] = _f_update
-        '''
-        #return
-
-
         d = self._canvas.data_bilevel
         if self._mask is not None:
             d += self._mask
-        self._base = graphics.SummedAreaTable(d.astype(np.uint))
+        # TODO
+        #self._base = graphics.AreaTable(d.astype(np.uint))
+        #print(d)
+        self._base = graphics.AreaTable(d.astype(np.uint8, copy=False))
 
         def f(_canvas, position, region):
+            # TODO overlay?
             self._base.paste(
                 position,
-                #graphics.SummedAreaTable(region.astype(np.uint))
-                graphics.SummedAreaTable(region)
+                #graphics.AreaTable(region.astype(np.uint))
+                graphics.AreaTable(region)
             )
             return
-
-            # TODO rm debug
-            # TODO mv to SummedAreaTable
-            def _TODO_rm_test_f():
-                d = self._canvas.data_bilevel
-                if self._mask is not None:
-                    d += self._mask
-                return graphics.SummedAreaTable(d.astype(np.uint))
-
-                # TODO eq!!!!
-
-            import matplotlib.pyplot as plt
-            plt.imshow(_TODO_rm_test_f().base)
-            print(_TODO_rm_test_f().base)
-            plt.show()
-            plt.imshow(self._base.base)
-            print(self._base.base)
-            plt.show()
-            plt.imshow(_TODO_rm_test_f().base - self._base.base)
-            plt.show()
-
-
-            assert np.array_equal(_TODO_rm_test_f().base, self._base)
 
         self._canvas.callbacks.region_update[self] = f
 
     def __del__(self):
         self._canvas.callbacks.region_update.pop(self)
 
+    # TODO rm debug
+    @timer
     def positions(
         self,
         block_size: graphics.Dimension
     ) -> np.typing.NDArray:
-        a = self._base.area_matrix(block_size)
         # unoccupied area == 0
-        return np.argwhere(a == 0)
+        return self._base.find(block_size, target_area=0)
 
+    # TODO rm debug
+    @timer
     def sample_position(
         self, 
         block_size: graphics.Dimension, 
@@ -93,18 +84,6 @@ class OccupancyMap:
         if r.size == 0:
             return None
 
-        # TODO rm debug
-        '''
-        pos = graphics.Coordinate(*random_state.choice(r))
-        print(
-            'sample_position', 
-            self._canvas.dimension, 
-            block_size, 
-            pos
-        )
-        return pos
-        '''
-
         return graphics.Coordinate(*random_state.choice(r))
 
     def query_position(
@@ -113,7 +92,7 @@ class OccupancyMap:
     ) -> typing.Iterator[graphics.Coordinate]:
         for pos, area in self._base.walk(block_size):
             # unoccupied area
-            if not area:
+            if area == 0:
                 yield pos
 
 class TextPlacement:
@@ -147,7 +126,13 @@ class TextPlacement:
         size_min, size_max = size_range
         rotation_min, rotation_max = rotation_range
 
-        def _impl(size: float, rotation: float):
+        @timer
+        def _impl(size: float, rotation: float, epochs_max: int=None):
+            if epochs_max is not None:
+                if epochs_max <= 0:
+                    return None
+                epochs_max -= 1
+
             if size is None:
                 return None
 
@@ -158,7 +143,7 @@ class TextPlacement:
                 return None
 
             # TODO rm debug
-            print('try', size, rotation)
+            #print('try', size, rotation)
 
             text_spec = backend_base.TextSpec(
                 position=None, 
@@ -179,17 +164,19 @@ class TextPlacement:
             # TODO rotate only once!!!!!!!!
             # if we didn't find a place...
             # first try to rotate!
-            res = _impl(
-                size=size, 
-                rotation=rotation + rotation_step
-            )
-            if res is not None:
-                return res
+            #res = _impl(
+            #    size=size, 
+            #    rotation=rotation + rotation_step,
+            #    epochs_max=1
+            #)
+            #if res is not None:
+            #    return res
 
             # make font smaller
             res = _impl(
                 size=size - size_step, 
-                rotation=rotation
+                rotation=rotation,
+                epochs_max=epochs_max
             )
             if res is not None:
                 return res
@@ -208,6 +195,10 @@ class TextPlacement:
                 )
             )
         
+
+        # TODO rm debug
+        print('try init', size_max, rotation)
+
         return _impl(size=size_max, rotation=rotation)
 
 
@@ -300,6 +291,10 @@ class TagCloud:
         max_freq = frequency_table.max().frequency
         last_freq = None
 
+        # text sizes
+        text_size_min, text_size_max = text_props['size_min'], text_props['size_max']
+        text_size_scaling = text_props['size_rescaling']
+
         for token, freq in frequency_table.items:
             # normalize
             freq = freq / max_freq
@@ -307,14 +302,12 @@ class TagCloud:
             if freq == 0:
                 continue
 
-            # select the text size
-            text_size_min, text_size_max = text_props['size_min'], text_props['size_max']
-            text_size_scaling = text_props['size_rescaling']
-            if last_freq is not None and text_size_scaling != 0:
+            if last_freq is not None:
                 text_size_max *= (
-                    text_size_scaling * (freq / float(last_freq))
+                    text_size_scaling * (freq / last_freq)
                         + (1 - text_size_scaling)
                 )
+            last_freq = freq
 
             text_spec = text_placement.add(
                 text=token, 
@@ -330,18 +323,16 @@ class TagCloud:
 
             yield text_spec
 
-            # update last frequency
-            last_freq = freq
 
             # TODO rm debug
             print('progress', token, freq)
             continue
-            import matplotlib.pyplot as plt
-            fig, ax = plt.subplots(2)
-            ax[0].imshow(text_placement.occupancy._base.base.astype(np.bool_))
-            ax[1].imshow(canvas.data_bilevel)
-            plt.suptitle(token)
-            plt.show()
+            #import matplotlib.pyplot as plt
+            #fig, ax = plt.subplots(2)
+            #ax[0].imshow(text_placement.occupancy._base.base.astype(np.bool_))
+            #ax[1].imshow(canvas.data_bilevel)
+            #plt.suptitle(token)
+            #plt.show()
 
     def draw(
         self,
@@ -371,7 +362,7 @@ class TagCloud:
             canvas = _make_canvas()
 
             # maximum text size when horizontal
-            size_max = canvas.dimension.height
+            size_max = canvas.dimension.transpose().height
 
             # we only have one token. We make it big!
             if len(frequency_table.items) == 1:
@@ -402,6 +393,9 @@ class TagCloud:
             text_props['size_max'] = _find_text_size_max(
                 n_samples=2
             )
+
+            # TODO rm debug
+            #raise NotImplementedError(fr'''size max is {text_props['size_max']}''')
 
         canvas = _make_canvas()
         layout = list(self._generate_layout(

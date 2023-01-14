@@ -147,11 +147,29 @@ class BBox(typing.NamedTuple):
 
 BilevelData = np.typing.NDArray[np.bool_]
 
+
+## TODO mv to utils
+import functools
+import time
+
+def timer(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        value = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        run_time = end_time - start_time
+        #print("Finished {} in {} msecs".format(repr(func.__name__), run_time * 1e3))
+        return value
+
+    return wrapper
+## TODO rm debug
+
 # see https://en.wikipedia.org/wiki/Summed-area_table
 class SummedAreaTable:
     @staticmethod
-    #@numba.jit
-    def _make(a: np.typing.NDArray):
+    #@numba.jit(nopython=False, nogil=True, fastmath=True)
+    def _make(a: np.typing.NDArray) -> np.typing.NDArray:
         return np.apply_over_axes(
             np.cumsum, 
             a, 
@@ -200,11 +218,11 @@ class SummedAreaTable:
                 )
 
     @staticmethod
-    @numba.jit
+    @numba.jit(nogil=True, fastmath=True)
     def _area_matrix(
         a: np.typing.NDArray, 
         block_size: Dimension
-    ):
+    ) -> np.typing.NDArray:
         x_block, y_block = block_size
 
         return (
@@ -212,6 +230,8 @@ class SummedAreaTable:
                 - (a[:-x_block, y_block:] - a[:-x_block, :-y_block])
         )    
 
+    # TODO rm timer
+    #@timer
     def area_matrix(
         self,
         block_size: Dimension
@@ -219,6 +239,33 @@ class SummedAreaTable:
         return self._area_matrix(
             self.base, 
             block_size=block_size
+        )
+
+    @staticmethod
+    #@numba.jit(nopython=False, nogil=True, fastmath=True)
+    def _find(
+        a: np.typing.NDArray, 
+        block_size: Dimension, 
+        target_area: np.typing.DTypeLike
+    ):
+        return np.argwhere(
+            SummedAreaTable._area_matrix(
+                a, 
+                block_size=block_size
+            ) == target_area
+        )
+
+    # TODO rm timer
+    @timer
+    def find(
+        self,
+        block_size: Dimension,
+        target_area: np.typing.DTypeLike
+    ):
+        return self._find(
+            self.base, 
+            block_size=block_size,
+            target_area=target_area
         )
 
     @staticmethod
@@ -238,6 +285,8 @@ class SummedAreaTable:
 
         return a
 
+    # TODO rm timer
+    #@timer
     def paste(
         self,
         position: Coordinate,
@@ -251,34 +300,4 @@ class SummedAreaTable:
 
         return self
 
-        # TODO rm!!!
-        # TODO rm debug
-        # TODO handle overflow!!!
-        print(
-            'paste',
-            'base:',
-            self.base.shape,
-            position,
-            shift(self.base, position).shape, 
-            'source:',
-            source.base.shape,
-            shift(self.base, position)[slice_like(source.base)].shape
-        )
-        shift(self.base, position)[slice_like(source.base)] += source.base
-        return self
-
-    # TODO test!!!!!!!!!!!!!!!!!!!!!!!!!
-    def _rm_area_matrix_comp(self, block_size: Dimension):
-        x_max, y_max = self.base.shape
-        x_block, y_block = block_size
-
-        res = np.full(((x_max - x_block), (y_max - y_block)), fill_value=np.nan)
-        for x in range(x_max - x_block):
-            for y in range(y_max - y_block):
-                offset = Coordinate(x, y)
-                res[x, y] = self.area(
-                    offset=offset, 
-                    block_size=block_size
-                )
-
-        return res
+AreaTable = SummedAreaTable

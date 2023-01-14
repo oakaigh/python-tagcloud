@@ -5,7 +5,7 @@ from . import backend_base
 from . import graphics
 
 import math
-import queue
+import collections
 
 import numpy as np
 import numpy.typing
@@ -22,6 +22,19 @@ from PIL.Image import (
 import PIL.ImageDraw
 import PIL.ImageFont
 
+
+class TaskQueue:
+    def __init__(self):
+        self._base = collections.deque()
+
+    def get(self):
+        return self._base.popleft()
+
+    def put(self, o):
+        return self._base.append(o)
+
+    def empty(self):
+        return len(self._base) == 0
 
 class Image:
     @classmethod
@@ -100,7 +113,7 @@ class Image:
         self._nocopy = nocopy
         self._render_queue = (
             None if norender else 
-            getattr(self, '_render_queue', None) or queue.Queue()
+            getattr(self, '_render_queue', None) or TaskQueue()
         )
         return self
 
@@ -111,7 +124,6 @@ class Image:
         while not self._render_queue.empty():
             f = self._render_queue.get()
             f.__call__()
-            self._render_queue.task_done()
 
         return self
 
@@ -335,14 +347,36 @@ class Font:
     pass
 
 
+
+
+## TODO mv to utils
+import functools
+import time
+
+def timer(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        value = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        run_time = end_time - start_time
+        #print("Finished {} in {} msecs".format(repr(func.__name__), run_time * 1e3))
+        return value
+
+    return wrapper
+## TODO rm debug
+
+
+
+
 import io
 
 class CanvasPIL(backend_base.CanvasBase):
     def __init__(self, size: graphics.Dimension):
         super().__init__()
         # TODO
-        #self._base = Image.make(mode='1', size=size.transpose(), color=0)
-        self._base = Image.make(mode='L', size=size.transpose(), color=0)
+        self._base = Image.make(mode='1', size=size.transpose(), color=0)
+        #self._base = Image.make(mode='L', size=size.transpose(), color=0)
         # TODO !!!!!!!
         with open('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', mode='rb') as f:
             self._font_data = f.read()
@@ -355,6 +389,8 @@ class CanvasPIL(backend_base.CanvasBase):
     def data_bilevel(self) -> graphics.BilevelData:
         return self._base.data
 
+    # TODO rm
+    @timer
     def text(self, text_spec: backend_base.TextSpec) -> graphics.Dimension:
         # TODO font manager!!! 
         font = PIL.ImageFont.truetype(
@@ -386,14 +422,4 @@ class CanvasPIL(backend_base.CanvasBase):
                 region.data
             )
 
-        # TODO rm d
-        '''
-        print(
-            'TODO_rm_text', 
-            'text:',
-            text_spec,
-            'region:',
-            region.size, region.data.shape
-        )
-        '''
         return region.size.transpose()
