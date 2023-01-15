@@ -37,26 +37,28 @@ class OccupancyMap:
     def __init__(
         self, 
         canvas: backend_base.CanvasBase, 
-        mask: typing.Union[np.typing.ArrayLike, None]=None
+        mask: np.typing.ArrayLike=None
     ):
+        _as_bool = lambda a: np.asarray(a, dtype=np.bool_)
+
         self._canvas = canvas
         self._mask = mask
 
-        d = self._canvas.data_bilevel
-        if self._mask is not None:
-            d += self._mask
-        # TODO
-        #self._base = graphics.AreaTable(d.astype(np.uint))
-        #print(d)
-        self._base = graphics.AreaTable(d.astype(np.uint8, copy=False))
+        self._base = graphics.AreaTable(
+            _as_bool(self._canvas.data_bilevel)
+                + _as_bool(self._mask)
+        )
 
         def f(_canvas, position, region):
             # TODO overlay?
             self._base.paste(
                 position,
-                #graphics.AreaTable(region.astype(np.uint))
-                graphics.AreaTable(region)
+                graphics.AreaTable(_as_bool(region))
             )
+
+            # TODO rm debug
+            #print('self._base', self._base.base)
+
             return
 
         self._canvas.callbacks.region_update[self] = f
@@ -64,8 +66,6 @@ class OccupancyMap:
     def __del__(self):
         self._canvas.callbacks.region_update.pop(self)
 
-    # TODO rm debug
-    @timer
     def positions(
         self,
         block_size: graphics.Dimension
@@ -73,8 +73,6 @@ class OccupancyMap:
         # unoccupied area == 0
         return self._base.find(block_size, target_area=0)
 
-    # TODO rm debug
-    @timer
     def sample_position(
         self, 
         block_size: graphics.Dimension, 
@@ -126,7 +124,6 @@ class TextPlacement:
         size_min, size_max = size_range
         rotation_min, rotation_max = rotation_range
 
-        @timer
         def _impl(size: float, rotation: float, epochs_max: int=None):
             if epochs_max is not None:
                 if epochs_max <= 0:
@@ -184,17 +181,16 @@ class TextPlacement:
             return None
 
         rotation = rotation_min
-        if random_state.random() < rotation_prob:
-            # TODO
-            # see https://stackoverflow.com/a/11949245/11934495
-            rotation = random_state.choice(
-                range(
-                    rotation_min, 
-                    rotation_max + rotation_step, 
-                    rotation_step
-                )
-            )
-        
+        #if random_state.random() < rotation_prob:
+        #    # TODO
+        #    # see https://stackoverflow.com/a/11949245/11934495
+        #    rotation = random_state.choice(
+        #        range(
+        #            rotation_min, 
+        #            rotation_max + rotation_step, 
+        #            rotation_step
+        #        )
+        #    )
 
         # TODO rm debug
         print('try init', size_max, rotation)
@@ -309,18 +305,20 @@ class TagCloud:
                 )
             last_freq = freq
 
-            text_spec = text_placement.add(
-                text=token, 
-                size_range=(text_size_min, text_size_max), 
-                size_step=text_props['size_step'], 
-                rotation_range=text_props['rotation_range'],
-                rotation_step=text_props['rotation_step'],
-                rotation_prob=text_props['rotation_prob']
-            )
+            # TODO rm
+            from . import utils
+            with utils.perf_timer(lambda t: print('elapsed', t)):
+                text_spec = text_placement.add(
+                    text=token, 
+                    size_range=(text_size_min, text_size_max), 
+                    size_step=text_props['size_step'], 
+                    rotation_range=text_props['rotation_range'],
+                    rotation_step=text_props['rotation_step'],
+                    rotation_prob=text_props['rotation_prob']
+                )
             # we were unable to draw any more
             if text_spec is None:
                 break
-
             yield text_spec
 
 

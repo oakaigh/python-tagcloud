@@ -1,3 +1,6 @@
+import typing
+
+
 def subdict(
     o: dict, 
     keys, 
@@ -40,7 +43,6 @@ def context_setattrs(o, **attrs):
     setattrs(o, **attrs_orig)
     delattrs(o, *noattrs_orig)
 
-import typing
 
 class Callback(dict):
     def register(
@@ -116,3 +118,22 @@ class Range:
                 yield value
                 value += self.step
         '''
+
+import time
+import datetime
+
+# see https://stackoverflow.com/a/69156219/11934495
+class perf_timer:
+    def __init__(self, callback):
+        self._callback = callback
+
+    def __enter__(self):
+        self._start_time = time.perf_counter()
+        return self
+
+    def __exit__(self, *_args, **_kwargs):
+        return self._callback.__call__(
+            datetime.timedelta(
+                seconds=time.perf_counter() - self._start_time
+            )
+        )

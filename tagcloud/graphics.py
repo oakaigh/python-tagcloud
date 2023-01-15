@@ -173,8 +173,7 @@ class SummedAreaTable:
         return np.apply_over_axes(
             np.cumsum, 
             a, 
-            # NOTE outer to inner axis for speed?
-            axes=np.arange(2)[::-1]
+            axes=np.arange(2)
         )
 
     def __init__(self, a: np.typing.NDArray):

@@ -348,27 +348,6 @@ class Font:
 
 
 
-
-## TODO mv to utils
-import functools
-import time
-
-def timer(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.perf_counter()
-        value = func(*args, **kwargs)
-        end_time = time.perf_counter()
-        run_time = end_time - start_time
-        #print("Finished {} in {} msecs".format(repr(func.__name__), run_time * 1e3))
-        return value
-
-    return wrapper
-## TODO rm debug
-
-
-
-
 import io
 
 class CanvasPIL(backend_base.CanvasBase):
@@ -389,8 +368,6 @@ class CanvasPIL(backend_base.CanvasBase):
     def data_bilevel(self) -> graphics.BilevelData:
         return self._base.data
 
-    # TODO rm
-    @timer
     def text(self, text_spec: backend_base.TextSpec) -> graphics.Dimension:
         # TODO font manager!!! 
         font = PIL.ImageFont.truetype(
