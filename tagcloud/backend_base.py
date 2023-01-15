@@ -17,11 +17,32 @@ class ElementSpec(SpecBase):
     position: graphics.Coordinate
     rotation: int
 
+class Callback(dict):
+    def register(
+        self, 
+        *callables: typing.Callable, 
+        **keyed_callables: typing.Callable
+    ):
+        self.update(
+            map(lambda f: (f, f), callables),
+            **keyed_callables
+        )
+        return self
+
+    # dispatch registered callbacks one by one
+    def dispatch(self, *args, **kwargs):
+        for f in self.values():
+            yield f.__call__(*args, **kwargs)
+
+    # dispatch all of the registered callbacks
+    def __call__(self, *args, **kwargs):
+        return list(self.dispatch(*args, **kwargs))
+
 # NOTE coord system: origin upper left 
 class CanvasBase(abc.ABC):
     def __init__(self):
         self.callbacks = types.SimpleNamespace(
-            region_update=utils.Callback[
+            region_update=Callback[
                 typing.Callable[
                     [
                         CanvasBase, 

@@ -11,29 +11,6 @@ import numpy.typing
 import numba
 
 
-# see https://stackoverflow.com/a/27087513/11934495
-def _TODO_shift_full(a, offsets, fill_value=np.nan):
-    _mom = lambda s: s if s > 0 else 0
-    _non = lambda s: s if s < 0 else None
-
-    res = np.full_like(a, fill_value=fill_value)
-    res[tuple(np.s_[_mom(o):_non(o)] for o in offsets)] \
-        = a[tuple(np.s_[_mom(-o):_non(-o)] for o in offsets)]
-
-    return res
-
-# see https://stackoverflow.com/a/27087513/11934495
-#@numba.jit
-def shift(a: np.typing.NDArray, offsets) -> np.typing.NDArray:
-    _mom = lambda s: s if s > 0 else 0
-    _non = lambda s: s if s < 0 else None
-    return a[tuple(np.s_[_mom(o):_non(o)] for o in offsets)]
-
-#@numba.jit
-def slice_like(a: np.typing.NDArray) -> np.s_:
-    s = a.shape
-    return np.s_[tuple(np.s_[:l] for l in s)]
-
 class RGBAChannel(enum.IntEnum):
     R = 0
     G = 1
@@ -148,23 +125,6 @@ class BBox(typing.NamedTuple):
 BilevelData = np.typing.NDArray[np.bool_]
 
 
-## TODO mv to utils
-import functools
-import time
-
-def timer(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.perf_counter()
-        value = func(*args, **kwargs)
-        end_time = time.perf_counter()
-        run_time = end_time - start_time
-        #print("Finished {} in {} msecs".format(repr(func.__name__), run_time * 1e3))
-        return value
-
-    return wrapper
-## TODO rm debug
-
 # see https://en.wikipedia.org/wiki/Summed-area_table
 class SummedAreaTable:
     @staticmethod
@@ -254,8 +214,6 @@ class SummedAreaTable:
             ) == target_area
         )
 
-    # TODO rm timer
-    @timer
     def find(
         self,
         block_size: Dimension,
@@ -268,14 +226,17 @@ class SummedAreaTable:
         )
 
     @staticmethod
-    #@numba.jit
+    #@numba.jit(nopython=True, nogil=True, fastmath=True)
     def _paste(
         a: np.typing.NDArray, 
         position: Coordinate, 
         a_src: np.typing.NDArray
     ):
-        a_ = shift(a, position)
-        s_pad = np.subtract(a_.shape, a_src.shape)
+        _a = np.asarray
+
+        a_ = a[position.x:, position.y:]
+        s_pad = _a(a_.shape) - _a(a_src.shape)
+
         a_[...] += np.pad(
             a_src, 
             pad_width=[(0, pad_r) for pad_r in s_pad], 
@@ -284,8 +245,6 @@ class SummedAreaTable:
 
         return a
 
-    # TODO rm timer
-    #@timer
     def paste(
         self,
         position: Coordinate,
