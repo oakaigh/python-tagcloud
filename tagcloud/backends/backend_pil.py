@@ -312,7 +312,7 @@ class Image:
         self._render_queue.put(f)
 
     def text(self, expand=False, **options) -> graphics.BBox:
-        bbox = graphics.BBox(*self._context.textbbox(**utils.subdict(
+        bbox = graphics.BBox(*self._context.textbbox(**utils.dict.subdict(
             options, 
             keys=[
                 'xy',
@@ -365,7 +365,7 @@ class CanvasPIL(backend_base.CanvasBase):
         return self._base.size.transpose()
 
     @property
-    def data_bilevel(self) -> graphics.BilevelData:
+    def data_bool(self) -> graphics.BilevelData:
         return self._base.data
 
     def text(self, text_spec: backend_base.TextSpec) -> graphics.Dimension:

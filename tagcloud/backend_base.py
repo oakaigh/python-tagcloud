@@ -61,7 +61,7 @@ class CanvasBase(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def data_bilevel(self) -> graphics.BilevelData:
+    def data_bool(self) -> graphics.BilevelData:
         raise NotImplementedError()
 
     @dc.dataclass(frozen=True)

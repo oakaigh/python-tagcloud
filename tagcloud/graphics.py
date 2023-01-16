@@ -2,7 +2,6 @@ from __future__ import annotations
 
 
 import typing
-import functools
 import enum
 
 import numpy as np
@@ -66,7 +65,6 @@ class Coordinate(typing.NamedTuple):
     def transpose(self) -> Coordinate:
         return Coordinate(x=self.y, y=self.x)
 
-@functools.total_ordering
 class Dimension(typing.NamedTuple):
     width: int
     height: int
@@ -80,10 +78,6 @@ class Dimension(typing.NamedTuple):
 
     def area(self):
         return self.width * self.height
-
-    def __eq__(self, other: Dimension) -> bool:
-        return (self.width == other.width 
-            and self.height == other.height)
 
     def __contains__(self, other: Dimension) -> bool:
         return (self.width >= other.width 
@@ -189,8 +183,6 @@ class SummedAreaTable:
                 - (a[:-x_block, y_block:] - a[:-x_block, :-y_block])
         )    
 
-    # TODO rm timer
-    #@timer
     def area_matrix(
         self,
         block_size: Dimension

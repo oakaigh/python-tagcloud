@@ -30,7 +30,7 @@ class CanvasMPL(backend_base.CanvasBase):
         )
         return np.asarray((r, g, b))
 
-    # NOTE dimension follows the ones in `data_bilevel`
+    # NOTE dimension follows the ones in `data_bool`
     @property
     def dimension(self) -> graphics.Dimension:
         _, _, width, height = self._figure.get_window_extent(
@@ -53,14 +53,14 @@ class CanvasMPL(backend_base.CanvasBase):
         )
 
     @property
-    def data_bilevel(self) -> graphics.BilevelData:
+    def data_bool(self) -> graphics.BilevelData:
         return graphics.rgb_to_bilevel(
             self.data_rgb, 
             rgb_background=self._background_rgb
         )
 
-    # position: coordinate in `data_bilevel`
-    # dimension: follows coordinate convention in `data_bilevel`
+    # position: coordinate in `data_bool`
+    # dimension: follows coordinate convention in `data_bool`
 
     # NOTE coordinate convention: xy reversed!
     def text(self, text_spec: backend_base.TextSpec) -> graphics.Dimension:

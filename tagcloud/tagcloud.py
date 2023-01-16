@@ -12,27 +12,6 @@ import numpy as np
 import numpy.typing
 
 
-
-## TODO mv to utils
-import functools
-import time
-
-def timer(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        start_time = time.perf_counter()
-        value = func(*args, **kwargs)
-        end_time = time.perf_counter()
-        run_time = end_time - start_time
-        #print("Finished {} in {} msecs".format(repr(func.__name__), run_time * 1e3))
-        return value
-
-    return wrapper
-## TODO rm debug
-
-
-
-
 class OccupancyMap:
     def __init__(
         self, 
@@ -45,7 +24,7 @@ class OccupancyMap:
         self._mask = mask
 
         self._base = graphics.AreaTable(
-            _as_bool(self._canvas.data_bilevel)
+            _as_bool(self._canvas.data_bool)
                 + _as_bool(self._mask)
         )
 
@@ -306,8 +285,8 @@ class TagCloud:
             last_freq = freq
 
             # TODO rm
-            from . import utils
-            with utils.perf_timer(lambda t: print('elapsed', t)):
+            import cProfile
+            with cProfile.Profile() as pr:
                 text_spec = text_placement.add(
                     text=token, 
                     size_range=(text_size_min, text_size_max), 
@@ -316,6 +295,9 @@ class TagCloud:
                     rotation_step=text_props['rotation_step'],
                     rotation_prob=text_props['rotation_prob']
                 )
+
+                pr.print_stats(sort='time')
+
             # we were unable to draw any more
             if text_spec is None:
                 break
@@ -328,7 +310,7 @@ class TagCloud:
             #import matplotlib.pyplot as plt
             #fig, ax = plt.subplots(2)
             #ax[0].imshow(text_placement.occupancy._base.base.astype(np.bool_))
-            #ax[1].imshow(canvas.data_bilevel)
+            #ax[1].imshow(canvas.data_bool)
             #plt.suptitle(token)
             #plt.show()
 
@@ -391,9 +373,6 @@ class TagCloud:
             text_props['size_max'] = _find_text_size_max(
                 n_samples=2
             )
-
-            # TODO rm debug
-            #raise NotImplementedError(fr'''size max is {text_props['size_max']}''')
 
         canvas = _make_canvas()
         layout = list(self._generate_layout(
