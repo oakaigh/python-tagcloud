@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from . import utils
+
 from . import backend_base
 from . import graphics
 
 
 import typing
-
 import random
+
+import collections as coll
+import collections.abc
 
 import numpy as np
 import numpy.typing
@@ -35,15 +39,14 @@ class OccupancyMap:
                 graphics.AreaTable(_as_bool(region))
             )
 
-            # TODO rm debug
-            #print('self._base', self._base.base)
-
-            return
-
         self._canvas.callbacks.region_update[self] = f
 
     def __del__(self):
         self._canvas.callbacks.region_update.pop(self)
+
+    @property
+    def canvas(self): 
+        return self._canvas
 
     def positions(
         self,
@@ -78,103 +81,54 @@ class TextPlacement:
         mask: np.typing.ArrayLike | None,
         random_state: random.Random
     ):
-        self.canvas = canvas
         self.occupancy = OccupancyMap(canvas, mask=mask)
         self.random_state = random_state
 
     def add(
-        self, 
-        text: str, 
-        size_range: typing.Tuple[float, float], 
-        size_step: float, 
-
-        # TODO use range object
-        #rotation_range: range
-        rotation_range: typing.Tuple[float, float], 
-        rotation_step: float, 
-
-        rotation_prob: float,
+        self,
+        content: str,
+        sizes: coll.abc.Sequence,
+        rotations: coll.abc.Sequence,
+        rotation_weights: coll.abc.Sequence,
+        rotation_prob: float
     ) -> backend_base.TextSpec:
         random_state = self.random_state
-        canvas = self.canvas
         occupancy = self.occupancy
+        canvas = self.occupancy.canvas
 
-        # TODO
-        size_min, size_max = size_range
-        rotation_min, rotation_max = rotation_range
+        # TODO!!!!!!!!!!!!!!!!!
+        rotation = rotations[0]
 
-        def _impl(size: float, rotation: float, epochs_max: int=None):
-            if epochs_max is not None:
-                if epochs_max <= 0:
-                    return None
-                epochs_max -= 1
-
-            if size is None:
-                return None
-
-            if not (size_min <= size and size <= size_max):
-                return None
-
-            if not (rotation_min <= rotation and rotation <= rotation_max):
-                return None
-
-            # TODO rm debug
-            #print('try', size, rotation)
-
+        for s in utils.sequence.sorted(
+            sizes, 
+            ascending=False
+        ):
             text_spec = backend_base.TextSpec(
                 position=None, 
                 rotation=rotation,
-                content=text, 
-                size=size
+                content=content, 
+                size=s
             )
             dim = canvas.text(text_spec)
 
             # try to find a position
-            pos = occupancy.sample_position(dim, random_state=random_state)
+            pos = occupancy.sample_position(
+                dim, 
+                random_state=random_state
+            )
             if pos is not None:
                 text_spec = text_spec.set(position=pos)
                 # draw the text
                 canvas.text(text_spec)
                 return text_spec
 
-            # TODO rotate only once!!!!!!!!
-            # if we didn't find a place...
-            # first try to rotate!
-            #res = _impl(
-            #    size=size, 
-            #    rotation=rotation + rotation_step,
-            #    epochs_max=1
-            #)
-            #if res is not None:
-            #    return res
+        return None
 
-            # make font smaller
-            res = _impl(
-                size=size - size_step, 
-                rotation=rotation,
-                epochs_max=epochs_max
-            )
-            if res is not None:
-                return res
-
-            return None
-
-        rotation = rotation_min
+        # TODO
         #if random_state.random() < rotation_prob:
         #    # TODO
         #    # see https://stackoverflow.com/a/11949245/11934495
-        #    rotation = random_state.choice(
-        #        range(
-        #            rotation_min, 
-        #            rotation_max + rotation_step, 
-        #            rotation_step
-        #        )
-        #    )
-
-        # TODO rm debug
-        print('try init', size_max, rotation)
-
-        return _impl(size=size_max, rotation=rotation)
+        #    rotation = random_state.choice(rotations)
 
 
 class FrequencyData(typing.NamedTuple):
@@ -230,14 +184,13 @@ class DescendingFrequencyTable:
         return max(self.items, key=lambda x: x.frequency)
 
 
-
 class TagCloud:
     class TextParams(typing.TypedDict):
         size_min: int
-        size_max: typing.Union[int, None]
+        size_max: int | None
         size_step: int
         size_rescaling: float
-        rotation_range: typing.Tuple[float, float]
+        rotation_range: typing.Tuple[int, int]
         rotation_step: float
         rotation_prob: float
 
@@ -257,6 +210,21 @@ class TagCloud:
         bool_mask: typing.Union[np.typing.ArrayLike, None],
         text_props: TextParams
     ) -> typing.Iterator[backend_base.TextSpec]:
+        class RelativeScaling:
+            def __init__(self, n):
+                self._n = n
+                self._last_freq = None
+
+            def __call__(self, frequency):
+                res = 1.
+                if self._last_freq is not None:
+                    res = (
+                        self._n * (frequency / self._last_freq)
+                            + (1 - self._n)
+                    )
+                self._last_freq = frequency
+                return res
+
         text_placement = TextPlacement(
             canvas=canvas, 
             mask=bool_mask, 
@@ -264,55 +232,45 @@ class TagCloud:
         )
 
         max_freq = frequency_table.max().frequency
-        last_freq = None
 
         # text sizes
         text_size_min, text_size_max = text_props['size_min'], text_props['size_max']
-        text_size_scaling = text_props['size_rescaling']
+
+        # relative scaling
+        rscale = RelativeScaling(text_props['size_rescaling'])
 
         for token, freq in frequency_table.items:
-            # normalize
+            # normalize frequency
             freq = freq / max_freq
 
             if freq == 0:
                 continue
 
-            if last_freq is not None:
-                text_size_max *= (
-                    text_size_scaling * (freq / last_freq)
-                        + (1 - text_size_scaling)
-                )
-            last_freq = freq
+            text_size_max *= rscale(freq)
 
-            # TODO rm
-            import cProfile
-            with cProfile.Profile() as pr:
-                text_spec = text_placement.add(
-                    text=token, 
-                    size_range=(text_size_min, text_size_max), 
-                    size_step=text_props['size_step'], 
-                    rotation_range=text_props['rotation_range'],
-                    rotation_step=text_props['rotation_step'],
-                    rotation_prob=text_props['rotation_prob']
-                )
+            # TODO !!!!!
+            text_spec = text_placement.add(
+                content=token,
+                sizes=range(
+                    text_size_min, 
+                    int(text_size_max), 
+                    text_props['size_step']
+                ),
+                rotations=range(
+                    *text_props['rotation_range'], 
+                    text_props['rotation_step']
+                ),
+                rotation_weights=None,
+                rotation_prob=None
+            )
 
-                pr.print_stats(sort='time')
+            # TODO rm debug
+            print('progress', token, freq)
 
             # we were unable to draw any more
             if text_spec is None:
                 break
             yield text_spec
-
-
-            # TODO rm debug
-            print('progress', token, freq)
-            continue
-            #import matplotlib.pyplot as plt
-            #fig, ax = plt.subplots(2)
-            #ax[0].imshow(text_placement.occupancy._base.base.astype(np.bool_))
-            #ax[1].imshow(canvas.data_bool)
-            #plt.suptitle(token)
-            #plt.show()
 
     def draw(
         self,
@@ -323,8 +281,8 @@ class TagCloud:
     ) -> backend_base.CanvasBase:
         text_props = {
             **dict(
-                size_min=5., size_max=None,
-                size_step=1.,
+                size_min=5, size_max=None,
+                size_step=1,
                 size_rescaling=.5,
                 rotation_range=(0, 90),
                 rotation_step=90,
@@ -359,7 +317,7 @@ class TagCloud:
                         'size_max': size_max
                     }
                 )
-            ), float)
+            ), int)
             
             if len(sizes) < 1:
                 raise Exception('canvas out of space')
@@ -370,9 +328,9 @@ class TagCloud:
             return 2 * np.prod(sizes) / np.sum(sizes)
 
         if text_props.get('size_max', None) is None:
-            text_props['size_max'] = _find_text_size_max(
+            text_props['size_max'] = int(_find_text_size_max(
                 n_samples=2
-            )
+            ))
 
         canvas = _make_canvas()
         layout = list(self._generate_layout(
@@ -383,5 +341,5 @@ class TagCloud:
         ))
 
         # TODO
-        return canvas
+        return canvas, layout
         

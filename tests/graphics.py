@@ -1,4 +1,4 @@
-# TODO test!!!!!!!!!!!!!!!!!!!!!!!!!
+# TODO 
 def _SummedAreaTable_rm_area_matrix_comp(self, block_size: Dimension):
     x_max, y_max = self.base.shape
     x_block, y_block = block_size
