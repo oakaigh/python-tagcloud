@@ -116,7 +116,7 @@ class BBox(typing.NamedTuple):
                 and self.bottom >= other.bottom)
         )
 
-BilevelData = np.typing.NDArray[np.bool_]
+BoolData = np.typing.NDArray[np.bool_]
 
 
 # see https://en.wikipedia.org/wiki/Summed-area_table

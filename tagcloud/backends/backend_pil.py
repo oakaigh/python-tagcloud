@@ -152,7 +152,11 @@ class Image:
             return
 
         def f():
-            self._base = self._base.transpose(method, *args, **kwargs)
+            nonlocal self, method, args, kwargs
+            self._base = self._base.transpose(
+                method, 
+                *args, **kwargs
+            )
         self._render_queue.put(f)            
 
         if method in (None, Transpose.ROTATE_180):
@@ -170,7 +174,11 @@ class Image:
         *args, **kwargs
     ):
         def f():
-            self._base = self._base.transform(size, *args, **kwargs)
+            nonlocal self, size, args, kwargs
+            self._base = self._base.transform(
+                size, 
+                *args, **kwargs
+            )
         self._render_queue.put(f)
 
         self._dimension = size
@@ -301,6 +309,7 @@ class Image:
             return
 
         def f():
+            nonlocal self, box
             self._base = self._base.crop(box=box)
         self._render_queue.put(f)
 
@@ -308,7 +317,12 @@ class Image:
 
     def paste(self, image: Image, box: graphics.BBox=None, mask: Image=None):
         def f():
-            self._base.paste(image._base, box=box, mask=mask._base)
+            nonlocal self, image, box, mask
+            self._base.paste(
+                image._base, 
+                box=box, 
+                mask=mask._base
+            )
         self._render_queue.put(f)
 
     def text(self, expand=False, **options) -> graphics.BBox:
@@ -337,10 +351,13 @@ class Image:
             ))
         
         def f():
+            nonlocal self, options
             self._context.text(**options)
         self._render_queue.put(f)
 
         return bbox
+
+
 
 # TODO
 class Font:
@@ -349,6 +366,57 @@ class Font:
 
 
 import io
+
+# TODO
+class TextBoxPIL:
+    def __init__(
+        self, 
+        canvas: CanvasPIL, 
+        spec: backend_base.TextSpec
+    ):
+        self._canvas = canvas
+        self._spec = spec
+
+        # TODO font manager!!! 
+        with io.BytesIO(self._canvas._font_data) as f:
+            font = PIL.ImageFont.truetype(
+                f, 
+                size=int(self._spec.size)
+            )
+        # TODO memorization!!!
+        self._base = Image.from_font(
+            font, 
+            mode='1', 
+            text=self._spec.content
+        )
+
+        self._base.rotate(
+            angle=int(self._spec.rotation), 
+            expand=True
+        )
+        
+    @property
+    def dimension(self):
+        return self._base.size.transpose()
+
+    def render(self, position: graphics.Coordinate):
+        self._base.render()
+
+        self._canvas._base.paste(
+            self._base, 
+            # NOTE pillow uses column major `pos` is row major
+            box=position.transpose(), 
+            mask=self._base
+        )
+        self._canvas._base.render()
+
+        self._canvas.callbacks.region_update.__call__(
+            self, 
+            position, 
+            self._base.data
+        )
+
+
 
 class CanvasPIL(backend_base.CanvasBase):
     def __init__(self, size: graphics.Dimension):
@@ -365,15 +433,25 @@ class CanvasPIL(backend_base.CanvasBase):
         return self._base.size.transpose()
 
     @property
-    def data_bool(self) -> graphics.BilevelData:
+    def data_bool(self) -> graphics.BoolData:
         return self._base.data
 
+    def textbox(
+        self, 
+        textbox_spec: backend_base.TextBoxSpec
+    ) -> TextBoxPIL:
+        return TextBoxPIL(self, textbox_spec)
+
+
+
+    # TODO deprecate!!!!!!!!!!!!!!!!
     def text(self, text_spec: backend_base.TextSpec) -> graphics.Dimension:
         # TODO font manager!!! 
-        font = PIL.ImageFont.truetype(
-            io.BytesIO(self._font_data), 
-            size=int(text_spec.size)
-        )
+        with io.BytesIO(self._font_data) as f:
+            font = PIL.ImageFont.truetype(
+                f, 
+                size=int(text_spec.size)
+            )
 
         # TODO memorization
         region = Image.from_font(font, mode='1', text=text_spec.content)
@@ -400,3 +478,4 @@ class CanvasPIL(backend_base.CanvasBase):
             )
 
         return region.size.transpose()
+    # ......

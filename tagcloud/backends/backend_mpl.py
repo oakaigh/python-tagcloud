@@ -53,7 +53,7 @@ class CanvasMPL(backend_base.CanvasBase):
         )
 
     @property
-    def data_bool(self) -> graphics.BilevelData:
+    def data_bool(self) -> graphics.BoolData:
         return graphics.rgb_to_bilevel(
             self.data_rgb, 
             rgb_background=self._background_rgb

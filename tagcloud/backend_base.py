@@ -1,21 +1,13 @@
+from __future__ import annotations
+
+
 import typing
 import dataclasses as dc
 import types
 import abc
 
-from . import utils
 from . import graphics
 
-
-@dc.dataclass(frozen=True)
-class SpecBase(abc.ABC):
-    def set(self, **attrs):
-        return dc.replace(self, **attrs)
-
-@dc.dataclass(frozen=True)
-class ElementSpec(SpecBase):
-    position: graphics.Coordinate
-    rotation: int
 
 class Callback(dict):
     def register(
@@ -38,6 +30,30 @@ class Callback(dict):
     def __call__(self, *args, **kwargs):
         return list(self.dispatch(*args, **kwargs))
 
+@dc.dataclass(frozen=True)
+class SpecBase(abc.ABC):
+    def set(self, **attrs):
+        return dc.replace(self, **attrs)
+
+@dc.dataclass(frozen=True)
+class BoxSpec(SpecBase):
+    rotation: int
+
+@dc.dataclass(frozen=True)
+class TextBoxSpec(BoxSpec):
+    content: str
+    size: int
+    # TODO !!!!!!!!!!!!!!!!
+    #font: FontBase 
+
+class TextBoxBase(abc.ABC):
+    @property
+    def dimension(self):
+        raise NotImplementedError()
+
+    def render(self, position: graphics.Coordinate):
+        raise NotImplementedError()
+
 # NOTE coord system: origin upper left 
 class CanvasBase(abc.ABC):
     def __init__(self):
@@ -47,7 +63,7 @@ class CanvasBase(abc.ABC):
                     [
                         CanvasBase, 
                         graphics.Coordinate, 
-                        graphics.BilevelData
+                        graphics.BoolData
                     ], 
                     typing.Any
                 ]
@@ -61,16 +77,27 @@ class CanvasBase(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def data_bool(self) -> graphics.BilevelData:
+    def data_bool(self) -> graphics.BoolData:
         raise NotImplementedError()
 
-    @dc.dataclass(frozen=True)
-    class TextSpec(ElementSpec):
-        content: str
-        size: int
+    @abc.abstractmethod
+    def textbox(self, textbox_spec: TextBoxSpec) -> TextBoxBase:
+        pass
 
+
+
+    # TODO deprecate @#######################
     @abc.abstractmethod
     def text(self, text_spec: TextSpec) -> graphics.Dimension:
         raise NotImplementedError()
+    ####################################
 
-TextSpec = CanvasBase.TextSpec
+# TODO deprecate ##########
+@dc.dataclass(frozen=True)
+class TextSpec:
+    position: graphics.Coordinate
+    rotation: int    
+    content: str
+    size: int
+# TODO !!!!!!!!!!!!!########
+

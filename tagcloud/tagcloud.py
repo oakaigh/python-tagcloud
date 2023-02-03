@@ -7,6 +7,7 @@ from . import graphics
 
 
 import typing
+import dataclasses as dc
 import random
 
 import collections as coll
@@ -76,6 +77,11 @@ class OccupancyMap:
                 yield pos
 
 class TextPlacement:
+    @dc.dataclass(frozen=True)
+    class Spec:
+        position: graphics.Coordinate
+        textbox_spec: backend_base.TextBoxSpec
+    
     def __init__(self, 
         canvas: backend_base.CanvasBase, 
         mask: np.typing.ArrayLike | None,
@@ -91,7 +97,7 @@ class TextPlacement:
         rotations: coll.abc.Sequence,
         rotation_weights: coll.abc.Sequence,
         rotation_prob: float
-    ) -> backend_base.TextSpec:
+    ) -> Spec:
         random_state = self.random_state
         occupancy = self.occupancy
         canvas = self.occupancy.canvas
@@ -103,24 +109,23 @@ class TextPlacement:
             sizes, 
             ascending=False
         ):
-            text_spec = backend_base.TextSpec(
-                position=None, 
+            textbox_spec = backend_base.TextBoxSpec(
                 rotation=rotation,
                 content=content, 
                 size=s
             )
-            dim = canvas.text(text_spec)
+            textbox = canvas.textbox(textbox_spec)
 
-            # try to find a position
             pos = occupancy.sample_position(
-                dim, 
+                textbox.dimension,
                 random_state=random_state
             )
             if pos is not None:
-                text_spec = text_spec.set(position=pos)
-                # draw the text
-                canvas.text(text_spec)
-                return text_spec
+                textbox.render(position=pos)
+                return self.Spec(
+                    position=pos,
+                    textbox_spec=textbox_spec
+                )
 
         return None
 
@@ -307,7 +312,7 @@ class TagCloud:
                 return size_max
 
             sizes = np.fromiter(map(
-                lambda x: x.size, 
+                lambda x: x.textbox_spec.size, 
                 self._generate_layout(
                     frequency_table=frequency_table.head(n=n_samples),
                     canvas=canvas,
