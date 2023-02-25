@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from . import utils
 
 from . import backend_base
@@ -34,6 +35,7 @@ class OccupancyMap:
         )
 
         def f(_canvas, position, region):
+            nonlocal self
             # TODO overlay?
             self._base.paste(
                 position,
@@ -104,6 +106,12 @@ class TextPlacement:
 
         # TODO!!!!!!!!!!!!!!!!!
         rotation = rotations[0]
+        # TODO
+        # utils.sequence.sample(rotations, weights=rotation_weights)
+        #if random_state.random() < rotation_prob:
+        #    # TODO
+        #    # NOTE see https://stackoverflow.com/a/11949245/11934495
+        #    rotation = random_state.choice(rotations)        
 
         for s in utils.sequence.sorted(
             sizes, 
@@ -129,13 +137,6 @@ class TextPlacement:
 
         return None
 
-        # TODO
-        #if random_state.random() < rotation_prob:
-        #    # TODO
-        #    # see https://stackoverflow.com/a/11949245/11934495
-        #    rotation = random_state.choice(rotations)
-
-
 class FrequencyData(typing.NamedTuple):
     token: typing.Any
     frequency: float
@@ -157,11 +158,11 @@ class DescendingFrequencyTable:
         import pandas as pd
 
         @classmethod
-        def from_dataframe(cls, df: pd.DataFrame):
+        def from_dataframe(cls, df: pd.DataFrame) -> DescendingFrequencyTable:
             return cls.from_iter(df.to_dict('records'))
 
         @classmethod
-        def from_data(cls, a: typing.Iterable):
+        def from_data(cls, a: typing.Iterable) -> DescendingFrequencyTable:
             df_token_freqs = cls.pd.Series(a).value_counts()
 
             return cls.from_dataframe(
@@ -207,7 +208,7 @@ class TagCloud:
         self.canvas_backend = canvas_backend
         self.random_state = random_state
 
-    # mask: boolean mask
+    # TODO NOTE mask: boolean mask
     def _generate_layout(
         self,
         frequency_table: DescendingFrequencyTable, 
@@ -297,6 +298,7 @@ class TagCloud:
         }
 
         def _make_canvas():
+            nonlocal self, canvas_props
             return self.canvas_backend(**canvas_props)
 
         def _find_text_size_max(n_samples):
